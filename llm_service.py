@@ -178,3 +178,75 @@ class LLMService:
             formatted_tools.append(f"- {tool_name}: {description}")
         
         return "\n".join(formatted_tools)
+    
+    def check_tool_update_vs_new(self, query_description: str, tool_code: str, tool_name: str) -> Dict[str, Any]:
+        """
+        Check if an existing tool can be updated to support the requested functionality or if a new tool should be created.
+        
+        Args:
+            query_description: Description of what the user wants to do
+            tool_code: Complete Python code of the existing tool
+            tool_name: Name of the existing tool
+            
+        Returns:
+            Dictionary containing only the can_update boolean
+        """
+        # Create the prompt for Gemini
+        prompt = f"""
+        You are a code analysis system. Given a user's request description and an existing tool's complete code, 
+        determine if the existing tool can be updated to support the requested functionality or if a new tool should be created.
+        If the chosen tool is an api tool, then always create a new tool.
+
+        User Request: "{query_description}"
+
+        Existing Tool Name: {tool_name}
+
+        Existing Tool Code:
+        ```python
+        {tool_code}
+        ```
+
+        Analyze the existing tool's code and the user's request to determine:
+        1. Can the existing tool be modified/extended to support the requested functionality?
+        2. Would it be better to create a new tool instead?
+
+        Consider factors like:
+        - Code complexity and maintainability
+        - Whether the requested functionality fits the tool's purpose
+        - Whether adding the functionality would make the tool too complex
+        - Whether the functionality is significantly different from the tool's current purpose
+
+        Return your analysis in the following JSON format:
+        {{
+            "can_update": true/false
+        }}
+
+        Only return the JSON response, no additional text.
+        """
+        
+        try:
+            response = self.model.generate_content(prompt)
+            response_text = response.text.strip()
+            
+            # Parse the JSON response
+            if response_text.startswith('```json'):
+                response_text = response_text[7:-3].strip()
+            elif response_text.startswith('```'):
+                response_text = response_text[3:-3].strip()
+            
+            result = json.loads(response_text)
+            
+            return {
+                "can_update": result.get('can_update', False)
+            }
+            
+        except json.JSONDecodeError as e:
+            print(f"Error parsing LLM response as JSON: {e}", file=sys.stderr)
+            return {
+                "can_update": False
+            }
+        except Exception as e:
+            print(f"Error calling Gemini API for tool update check: {e}", file=sys.stderr)
+            return {
+                "can_update": False
+            }

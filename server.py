@@ -275,10 +275,13 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
     
     Args:
         query_description: Description of what the user wants to do
-        top_k: Number of top tools to return (default: 2)
+        top_k: Number of top tools to return (default: 1)
         
     Returns:
-        Dictionary containing the first recommended tool as tool_from_code and Composio tool data
+        Dictionary containing:
+        - tool_from_code: The first recommended tool with complete code
+        - tool_create: Boolean indicating if a new tool should be created (true) or existing tool can be updated (false)
+        - composio_tool: Relevant Composio tool data
     """
     global llm_service
     
@@ -292,6 +295,7 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
                     "success": False,
                     "error": f"LLM service initialization failed: {str(e)}",
                     "tool_from_code": {},
+                    "tool_create": False,
                     "composio_tool": {}
                 }
         
@@ -301,6 +305,7 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
                 "success": False,
                 "error": "No tools available. Please scan a directory first using scan_tools_directory.",
                 "tool_from_code": {},
+                "tool_create": False,
                 "composio_tool": {}
             }
         
@@ -313,6 +318,7 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
         
         # Build tool_from_code from the first recommended tool
         tool_from_code = {}
+        tool_create = False
         if recommended_tool_names and recommended_tool_names[0] in tool_discovery.tools:
             first_tool_name = recommended_tool_names[0]
             tool_info = tool_discovery.tools[first_tool_name]
@@ -323,6 +329,18 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
                 "class_name": tool_info.class_name,
                 "python_code": tool_info.python_code
             }
+            
+            # Check if the existing tool can be updated or if a new tool should be created
+            try:
+                update_analysis = llm_service.check_tool_update_vs_new(
+                    query_description,
+                    tool_info.python_code,
+                    first_tool_name
+                )
+                tool_create = not update_analysis.get('can_update', False)
+            except Exception as e:
+                print(f"Error checking tool update vs new: {e}", file=sys.stderr)
+                tool_create = True  # Default to creating new tool on error
         
         # Check for relevant Composio tools
         composio_tool = {}
@@ -359,6 +377,7 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
             "total_available_tools": len(tool_discovery.tools),
             "recommendations_requested": top_k,
             "tool_from_code": tool_from_code,
+            "tool_create": tool_create,
             "composio_tool": composio_tool
         }
         
@@ -367,6 +386,7 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
             "success": False,
             "error": f"Unexpected error: {str(e)}",
             "tool_from_code": {},
+            "tool_create": False,
             "composio_tool": {}
         }
 
