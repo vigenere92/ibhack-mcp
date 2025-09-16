@@ -118,3 +118,63 @@ class LLMService:
             formatted_tools.append(f"- {tool_name}: {description}")
         
         return "\n".join(formatted_tools)
+    
+    def find_relevant_composio_tool(self, query_description: str, available_tools: Dict[str, Any]) -> Optional[str]:
+        """
+        Find the most relevant Composio tool for a given description using Gemini.
+        
+        Args:
+            query_description: Description of what the user wants to do
+            available_tools: Dictionary of available Composio tools
+            
+        Returns:
+            Tool name if a relevant tool is found, None otherwise
+        """
+        if not available_tools:
+            return None
+        
+        # Prepare tool descriptions for the LLM (only name and description)
+        tools_description = self._format_composio_tools_for_llm(available_tools)
+        
+        # Create the prompt for Gemini
+        prompt = f"""
+        You are a tool recommendation system. Given a user's request description and a list of available Composio tools, 
+        determine if ANY of these tools can be used to fulfill the user's request.
+
+        User Request: "{query_description}"
+
+        Available Composio Tools:
+        {tools_description}
+
+        IMPORTANT: Only return a tool name if you are VERY SURE that the tool can be used for the user's request.
+        If you are not confident or if no tool is suitable, return "NONE".
+
+        Return only the tool name (exact match from the list) or "NONE", no additional text.
+        """
+        
+        try:
+            response = self.model.generate_content(prompt)
+            response_text = response.text.strip()
+            
+            # Clean up the response
+            if response_text.startswith('```'):
+                response_text = response_text.split('\n')[0].replace('```', '').strip()
+            
+            # Check if a valid tool name was returned
+            if response_text and response_text != "NONE" and response_text in available_tools:
+                return response_text
+            else:
+                return None
+            
+        except Exception as e:
+            print(f"Error calling Gemini API for Composio tool recommendation: {e}", file=sys.stderr)
+            return None
+    
+    def _format_composio_tools_for_llm(self, tools: Dict[str, Any]) -> str:
+        """Format Composio tools information for LLM consumption (only name and description)."""
+        formatted_tools = []
+        for tool_name, tool_info in tools.items():
+            description = tool_info.get('description', '')
+            formatted_tools.append(f"- {tool_name}: {description}")
+        
+        return "\n".join(formatted_tools)

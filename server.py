@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from fastmcp import FastMCP
 from llm_service import LLMService
+from composio import COMPOSIO_MODULE
 
 
 @dataclass
@@ -268,7 +269,7 @@ def perform_startup_scan():
 perform_startup_scan()
 
 @mcp.tool()
-def recommend_tools(query_description: str, top_k: int = 2) -> Dict[str, Any]:
+def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
     """
     Find the most relevant tools for a given description using Gemini AI.
     
@@ -277,7 +278,7 @@ def recommend_tools(query_description: str, top_k: int = 2) -> Dict[str, Any]:
         top_k: Number of top tools to return (default: 2)
         
     Returns:
-        Dictionary containing the recommended tools with complete Python code
+        Dictionary containing the first recommended tool as tool_from_code and Composio tool data
     """
     global llm_service
     
@@ -290,7 +291,8 @@ def recommend_tools(query_description: str, top_k: int = 2) -> Dict[str, Any]:
                 return {
                     "success": False,
                     "error": f"LLM service initialization failed: {str(e)}",
-                    "recommendations": []
+                    "tool_from_code": {},
+                    "composio_tool": {}
                 }
         
         # Get available tools
@@ -298,7 +300,8 @@ def recommend_tools(query_description: str, top_k: int = 2) -> Dict[str, Any]:
             return {
                 "success": False,
                 "error": "No tools available. Please scan a directory first using scan_tools_directory.",
-                "recommendations": []
+                "tool_from_code": {},
+                "composio_tool": {}
             }
         
         # Get tool names from LLM
@@ -308,33 +311,63 @@ def recommend_tools(query_description: str, top_k: int = 2) -> Dict[str, Any]:
             top_k
         )
         
-        # Build recommendations with complete Python code
-        recommendations = []
-        for tool_name in recommended_tool_names:
-            if tool_name in tool_discovery.tools:
-                tool_info = tool_discovery.tools[tool_name]
-                recommendations.append({
-                    "tool_name": tool_name,
-                    "description": tool_info.description,
-                    "file_path": tool_info.file_path,
-                    "class_name": tool_info.class_name,
-                    "python_code": tool_info.python_code
-                })
+        # Build tool_from_code from the first recommended tool
+        tool_from_code = {}
+        if recommended_tool_names and recommended_tool_names[0] in tool_discovery.tools:
+            first_tool_name = recommended_tool_names[0]
+            tool_info = tool_discovery.tools[first_tool_name]
+            tool_from_code = {
+                "tool_name": first_tool_name,
+                "description": tool_info.description,
+                "file_path": tool_info.file_path,
+                "class_name": tool_info.class_name,
+                "python_code": tool_info.python_code
+            }
+        
+        # Check for relevant Composio tools
+        composio_tool = {}
+        try:
+            # Get Composio tools
+            composio_tools = COMPOSIO_MODULE.tools
+            if composio_tools:
+                # Find relevant Composio tool
+                relevant_composio_tool_name = llm_service.find_relevant_composio_tool(
+                    query_description, 
+                    composio_tools
+                )
+                
+                if relevant_composio_tool_name and relevant_composio_tool_name in composio_tools:
+                    tool_info = composio_tools[relevant_composio_tool_name]
+                    toolkit_slug = tool_info.get('toolkit', '')
+                    toolkit_info = COMPOSIO_MODULE.toolkits.get(toolkit_slug, {})
+                    
+                    composio_tool = {
+                        "tool_name": relevant_composio_tool_name,
+                        "description": tool_info.get('description', ''),
+                        "toolkit_name": toolkit_info.get('name', ''),
+                        "auth_schemes": toolkit_info.get('auth_schemes', []),
+                        "input_parameters": tool_info.get('input_parameters', {}),
+                        "output_parameters": tool_info.get('output_parameters', {})
+                    }
+        except Exception as e:
+            print(f"Error checking Composio tools: {e}", file=sys.stderr)
+            composio_tool = {}
         
         return {
             "success": True,
             "query": query_description,
             "total_available_tools": len(tool_discovery.tools),
             "recommendations_requested": top_k,
-            "recommendations_found": len(recommendations),
-            "recommendations": recommendations
+            "tool_from_code": tool_from_code,
+            "composio_tool": composio_tool
         }
         
     except Exception as e:
         return {
             "success": False,
             "error": f"Unexpected error: {str(e)}",
-            "recommendations": []
+            "tool_from_code": {},
+            "composio_tool": {}
         }
 
 
