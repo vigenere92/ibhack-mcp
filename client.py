@@ -144,14 +144,13 @@ class MCPClientInterface:
         if not self.connected:
             print("Not connected to server. Please connect first.")
             return {"error": "Not connected"}
-        
+
         print(f"Executing tool: {tool_name}")
         print(f"Parameters: {kwargs}")
         
         result = await self.client.execute_tool(tool_name, kwargs)
         
-        print(f"Result: {json.dumps(result, indent=2)}")
-        return result
+        return result.content[0].text
 
 
 class MCPHTTPServer:
@@ -258,7 +257,7 @@ class MCPHTTPServer:
             
             # Execute the tool
             result = await self.client_interface.execute_tool(tool_name, **params)
-            
+
             return web.json_response({
                 "tool_name": tool_name,
                 "params": params,

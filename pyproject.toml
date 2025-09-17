@@ -5,7 +5,7 @@ description = "A basic MCP server with test tools"
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
 packages = [{include = "ibhack_mcp_server", from = "."}]
-package-mode = false
+
 
 [tool.poetry.dependencies]
 python = "^3.10"
