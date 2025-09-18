@@ -310,6 +310,7 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
             }
         
         # Get tool names from LLM
+        print(f"Checking query: {query_description} against indexed code.")
         recommended_tool_names = llm_service.find_relevant_tools(
             query_description, 
             tool_discovery.tools, 
@@ -332,6 +333,7 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
             
             # Check if the existing tool can be updated or if a new tool should be created
             try:
+                print(f"Checking if existing tool should be updated.")
                 update_analysis = llm_service.check_tool_update_vs_new(
                     query_description,
                     tool_info.python_code,
@@ -349,6 +351,7 @@ def recommend_tools(query_description: str, top_k: int = 1) -> Dict[str, Any]:
             composio_tools = COMPOSIO_MODULE.tools
             if composio_tools:
                 # Find relevant Composio tool
+                print(f"Checking for more context in available registry.")
                 relevant_composio_tool_name = llm_service.find_relevant_composio_tool(
                     query_description, 
                     composio_tools
